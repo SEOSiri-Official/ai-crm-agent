@@ -5,53 +5,43 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // INITIALIZATION OF ALL PILLARS
+    // 1. ARCHITECTURAL INITIALIZATION
     const notion = new Client({ auth: process.env.NOTION_API_KEY });
     const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    // PILLAR 1: NOTION (CRM SYNC)
-    const notionData = await notion.databases.query({ 
-      database_id: process.env.NOTION_DATABASE_ID! 
+    // 2. PILLAR 1: NOTION (CRM SYNC) - Type-Cast fix for Vercel
+    const notionData = await (notion.databases as any).query({ 
+      database_id: process.env.NOTION_DATABASE_ID as string,
     });
+    
     const leads = notionData.results.map((p: any) => ({
-      name: p.properties.Name?.title[0]?.plain_text || "Prospect",
+      name: p.properties.Name?.title[0]?.plain_text || "Valued Prospect",
+      company: p.properties.Company?.rich_text[0]?.plain_text || "Global Entity",
       email: p.properties.Email?.email || null,
-      company: p.properties.Company?.rich_text[0]?.plain_text || "Global Entity"
     }));
 
-    // PILLAR 2: SUPABASE (B2B SCHEMA & PRODUCTS)
+    // 3. PILLAR 2: SUPABASE (PRODUCT SCHEMA)
     const { data: products } = await supabase.from('products').select('*');
 
-    // PILLAR 3: GEMINI (AI AGENT ANALYSIS)
-    const aiResponse = await aiModel.generateContent(`
-      Role: SEOSIRI Sales Agent. Architect: Momenul Ahmad.
-      Analyze these CRM Leads: ${JSON.stringify(leads)}.
-      Cross-reference with these Products: ${JSON.stringify(products)}.
-      1. Choose the top lead. 2. Draft a personalized email subject and body for them.
+    // 4. PILLAR 3: GEMINI (AI INTELLIGENCE)
+    const result = await aiModel.generateContent(`
+      Identity: SEOSIRI Global Agent. 
+      Architect: Momenul Ahmad.
+      Analyze these CRM leads: ${JSON.stringify(leads)}.
+      Map them to our products: ${JSON.stringify(products)}.
+      Generate a professional Strategic Intelligence Report for seosiri.com.
     `);
     
-    // PILLAR 4: RESEND (ESP PREPARATION)
-    // We prepare the ESP meta-data so the user can click 'Send' from the UI
-    const esp_payload = {
-      from: "Momenul Ahmad <agent@seosiri.com>",
-      to: leads.find(l => l.email)?.email || "no-email-found",
-      subject: "Strategic AI Sales Proposal"
-    };
+    const report = result.response.text();
 
     return NextResponse.json({ 
-      architect: "Momenul Ahmad",
-      brand: "seosiri.com",
-      status: "INTEGRATED_SYSTEM_ACTIVE",
-      intelligence: {
-        report: aiResponse.response.text(),
-        leads: leads,
-        products: products || [],
-        esp_draft: esp_payload
-      }
+      meta: { architect: "Momenul Ahmad", brand: "seosiri.com", status: "Global_Active" },
+      intelligence: { report, leads, products: products || [] }
     });
   } catch (e: any) { 
-    return NextResponse.json({ error: e.message, status: "Sync_Failed" }, { status: 500 }); 
+    console.error("System Architect Alert:", e.message);
+    return NextResponse.json({ error: e.message }, { status: 500 }); 
   }
 }
