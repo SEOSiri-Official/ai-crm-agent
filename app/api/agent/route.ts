@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
@@ -7,7 +6,7 @@ export async function GET() {
     const NOTION_DB_ID = process.env.NOTION_DATABASE_ID;
     const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
-    // 1. DIRECT NOTION REST CALL (No Library = No "Not a Function" Error)
+    // 1. Fetch from Notion
     const notionResponse = await fetch(`https://api.notion.com/v1/databases/${NOTION_DB_ID}/query`, {
       method: 'POST',
       headers: {
@@ -18,43 +17,48 @@ export async function GET() {
       body: JSON.stringify({ page_size: 10 })
     });
 
+    const notionData = await notionResponse.json();
+
     if (!notionResponse.ok) {
-        const errorText = await notionResponse.text();
-        throw new Error(`Notion API Rejected Request: ${errorText}`);
+      return NextResponse.json({ error: "Notion Error", details: notionData.message }, { status: 500 });
     }
 
-    const notionData = await notionResponse.json();
-    const leads = notionData.results.map((p: any) => ({
-      name: p.properties.Name?.title[0]?.plain_text || "Prospect",
-      company: p.properties.Company?.rich_text[0]?.plain_text || "Global Org"
-    }));
+    // 2. RESILIENT MAPPING: Don't crash if columns are missing
+    const leads = (notionData.results || []).map((p: any) => {
+      // Find the title property regardless of what it is named
+      const titleKey = Object.keys(p.properties).find(key => p.properties[key].type === 'title');
+      const name = titleKey ? p.properties[titleKey].title[0]?.plain_text : "Unnamed Lead";
+      
+      return { name };
+    });
 
-    // 2. DIRECT GEMINI REST CALL (Pure AI Intelligence)
+    if (leads.length === 0) {
+      return NextResponse.json({ 
+        meta: { architect: "Momenul Ahmad" },
+        intelligence: { report: "CRM is empty. Please add a row in Notion to see the AI analysis.", leads: [] }
+      });
+    }
+
+    // 3. AI Analysis
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: `System: SEOSIRI Agent. Architect: Momenul Ahmad. Analyze these leads for seosiri.com: ${JSON.stringify(leads)}` }]
+          parts: [{ text: `System: SEOSIRI. Architect: Momenul Ahmad. Analyze these leads: ${JSON.stringify(leads)}` }]
         }]
       })
     });
 
     const geminiData = await geminiResponse.json();
-    const report = geminiData.candidates[0].content.parts[0].text;
+    const report = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "AI logic synchronization pending.";
 
-    // 3. SUCCESSFUL INTEGRATION RESPONSE
     return NextResponse.json({ 
-      meta: { architect: "Momenul Ahmad", platform: "seosiri.com", status: "GLOBAL_REST_ACTIVE" },
+      meta: { architect: "Momenul Ahmad", brand: "seosiri.com", status: "GLOBAL_ACTIVE" },
       intelligence: { report, leads }
     });
 
   } catch (e: any) { 
-    console.error("CRITICAL SYSTEM ERROR:", e.message);
-    return NextResponse.json({ 
-        error: "System Synchronization Failed", 
-        details: e.message,
-        solution: "Ensure Notion Database is 'Connected' to the integration"
-    }, { status: 500 }); 
+    return NextResponse.json({ error: "System Sync Failed", details: e.message }, { status: 500 }); 
   }
 }
