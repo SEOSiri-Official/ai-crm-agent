@@ -1,54 +1,60 @@
-// 1. Direct import to solve the "not a function" bug
-import { Client } from '@notionhq/client';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // 2. Validate Env Variables (Architectural Best Practice)
-    const notionKey = process.env.NOTION_API_KEY;
-    const dbId = process.env.NOTION_DATABASE_ID;
-    
-    if (!notionKey || !dbId) {
-        throw new Error("Missing Notion Environment Variables in Vercel");
+    const NOTION_SECRET = process.env.NOTION_API_KEY;
+    const NOTION_DB_ID = process.env.NOTION_DATABASE_ID;
+    const GEMINI_KEY = process.env.GEMINI_API_KEY;
+
+    // 1. DIRECT NOTION REST CALL (No Library = No "Not a Function" Error)
+    const notionResponse = await fetch(`https://api.notion.com/v1/databases/${NOTION_DB_ID}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${NOTION_SECRET}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ page_size: 10 })
+    });
+
+    if (!notionResponse.ok) {
+        const errorText = await notionResponse.text();
+        throw new Error(`Notion API Rejected Request: ${errorText}`);
     }
 
-    // 3. System Initialization
-    const notion = new Client({ auth: notionKey });
-    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const aiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    // 4. CRM SYNC (Force Type-Cast to ensure query exists)
-    const notionData = await (notion as any).databases.query({ 
-      database_id: dbId 
-    });
-    
+    const notionData = await notionResponse.json();
     const leads = notionData.results.map((p: any) => ({
       name: p.properties.Name?.title[0]?.plain_text || "Prospect",
-      company: p.properties.Company?.rich_text[0]?.plain_text || "Global Entity",
-      email: p.properties.Email?.email || null,
+      company: p.properties.Company?.rich_text[0]?.plain_text || "Global Org"
     }));
 
-    // 5. AI STRATEGY Logic
-    const result = await aiModel.generateContent(`
-      Analyze these CRM leads for seosiri.com: ${JSON.stringify(leads)}.
-      Architect: Momenul Ahmad. Provide a strategic report.
-    `);
-    
-    const report = result.response.text();
+    // 2. DIRECT GEMINI REST CALL (Pure AI Intelligence)
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: `System: SEOSIRI Agent. Architect: Momenul Ahmad. Analyze these leads for seosiri.com: ${JSON.stringify(leads)}` }]
+        }]
+      })
+    });
 
+    const geminiData = await geminiResponse.json();
+    const report = geminiData.candidates[0].content.parts[0].text;
+
+    // 3. SUCCESSFUL INTEGRATION RESPONSE
     return NextResponse.json({ 
-      meta: { architect: "Momenul Ahmad", brand: "seosiri.com" },
+      meta: { architect: "Momenul Ahmad", platform: "seosiri.com", status: "GLOBAL_REST_ACTIVE" },
       intelligence: { report, leads }
     });
 
   } catch (e: any) { 
-    console.error("System Error Log:", e.message);
+    console.error("CRITICAL SYSTEM ERROR:", e.message);
     return NextResponse.json({ 
-        error: "Synchronization Failed", 
-        details: e.message 
+        error: "System Synchronization Failed", 
+        details: e.message,
+        solution: "Ensure Notion Database is 'Connected' to the integration"
     }, { status: 500 }); 
   }
 }
