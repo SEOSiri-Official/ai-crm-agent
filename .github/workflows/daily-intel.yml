@@ -1,0 +1,11 @@
+name: SEOSIRI Daily Intelligence
+on:
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  ping-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger AI Strategic Analysis
+        run: |
+          curl -X GET "https://aicrm.seosiri.com/api/agent"
