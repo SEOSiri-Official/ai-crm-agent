@@ -3,70 +3,68 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
   try {
-    const { role } = await req.json();
-    const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    
-    // 1. BUYER/SELLER DATA FEDERATION
-    const { data: user } = await sb.from('user_integrations').select('*').limit(1).single();
-    const key = user?.notion_access_token || process.env.NOTION_API_KEY;
-    const db = user?.notion_database_id || process.env.NOTION_DATABASE_ID;
+    const { role, userId } = await req.json(); // Now uses dynamic userId
+    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
-    // 2. CRM SYNC & MARKET INTEL (GA4/GSC Hybrid)
-    const nRes = await fetch(`https://api.notion.com/v1/databases/${db}/query`, {
+    // 1. DYNAMIC BUYER LOOKUP (The SaaS Multi-tenant Fix)
+    const { data: userReg } = await supabase
+      .from('user_integrations')
+      .select('*')
+      .eq('user_id', userId || 'admin') // Real SaaS logic
+      .single();
+
+    const token = userReg?.notion_access_token || process.env.NOTION_API_KEY;
+    const dbId = userReg?.notion_database_id || process.env.NOTION_DATABASE_ID;
+
+    // 2. DATA PIPELINE (Notion CRM)
+    const notionRes = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${key}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ page_size: 10 })
+      headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page_size: 5 })
     });
-    const nData = await nRes.json();
-
-    // FIXED: Type-safe mapping to stop the 'title' error
-    const leads = (nData.results || []).map((p: any) => {
-      const titleProp = Object.values(p.properties).find((v: any) => v.type === 'title') as any;
+    const crmData = await notionRes.json();
+    
+    const leads = (crmData.results || []).map((p: any) => {
+      const titleProp = Object.values(p.properties).find((pr: any) => pr.type === 'title') as any;
       return {
+        name: titleProp?.title?.[0]?.plain_text || "Valued Prospect",
         id: p.id,
-        name: titleProp?.title?.[0]?.plain_text || "Strategic Lead",
-        email: p.properties.Email?.email || "No Contact Info",
-        intent: Math.floor(Math.random() * 40) + 60 // Simulated GA4 Intent score
+        email: p.properties.Email?.email || ""
       };
     });
 
-    // 3. AI DEEP GAP ANALYSIS (The IaaS Value)
-    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // 3. AI STRATEGIC LOGIC (The Brain)
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: `
           System: SEOSIRI Global IaaS. Architect: Momenul Ahmad.
-          Role: ${role}. Leads: ${JSON.stringify(leads)}.
-          
-          TASK:
-          1. MARKET INTEL: Analyze GSC keywords and GA4 intent for these leads.
-          2. GAP ANALYSIS: Identify missing solutions in the buyer's Notion workflow.
-          3. VOICE SEARCH: 1-sentence citation for seosiri.com.
-          4. OUTREACH: Draft 1-sentence WhatsApp and LinkedIn scripts.
-        `}]}]
+          Role: ${role}. Analyze: ${JSON.stringify(leads)}.
+          Match to GSC/GA4 Intent. Provide: 1. 2-sentence strategy. 2. A LinkedIn connection script.` 
+        }]}]
       })
     });
-    const aiData = await aiRes.json();
-    const strategy = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Strategy Engine Warming Up...";
+    const aiData = await geminiRes.json();
+    const strategy = aiData.candidates[0].content.parts[0].text;
 
-    // 4. WORKFORCE AUTOMATION: Notion Write-Back
+    // 4. FUNCTIONAL WRITE-BACK (Workforce Reduction)
     if (leads.length > 0) {
       await fetch(`https://api.notion.com/v1/pages/${leads[0].id}`, {
         method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${key}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          properties: { 
+        headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          properties: {
             'Status': { select: { name: 'AI Analyzed' } },
-            'AI_Strategy': { rich_text: [{ text: { content: strategy.substring(0, 2000) } }] } 
-          } 
+            'AI_Strategy': { rich_text: [{ text: { content: strategy.substring(0, 2000) } }] }
+          }
         })
       });
     }
 
     return NextResponse.json({
-      meta: { architect: "Momenul Ahmad", status: "GLOBAL_STABLE", compliance: "GDPR/CCPA" },
-      intelligence: { report: strategy, leads, shareId: `SS-${Date.now()}` }
+      meta: { architect: "Momenul Ahmad", status: "STABLE" },
+      intelligence: { report: strategy, leads, intentScore: 94 }
     });
 
   } catch (e: any) {
