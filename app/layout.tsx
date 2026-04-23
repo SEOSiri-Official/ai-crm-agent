@@ -4,33 +4,23 @@ import { Inter } from 'next/font/google';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'SEOSIRI CORE | Ultimate AI Sales Engine & Notion Integration',
-  description: 'Global SaaS/PaaS/IaaS bridging Notion CRM with Market Intelligence (GA4/GSC). Architected by Momenul Ahmad.',
-  keywords: 'Notion AI CRM, Sales Intelligence, Momenul Ahmad, seosiri, Global Lead Generation, GA4 Sales Integration',
+  title: 'SEOSIRI CORE | Integrated AI Sales Engine for Notion',
+  description: 'Global SaaS/PaaS/IaaS bridging Notion CRM with GSC/GA4 Market Intelligence. Architected by Momenul Ahmad.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const schemaData = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "SEOSIRI AI CRM CORE",
+    "name": "SEOSIRI AI CRM",
     "operatingSystem": "Web",
     "applicationCategory": "BusinessApplication",
-    "description": "Integrated AI Sales Agent and Notion CRM Synchronization System.",
-    "creator": {
-      "@type": "Person",
-      "name": "Momenul Ahmad",
-      "url": "https://www.seosiri.com"
-    },
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    }
+    "creator": { "@type": "Person", "name": "Momenul Ahmad", "url": "https://www.seosiri.com" },
+    "featureList": ["Notion Sync", "AI Lead Scoring", "GA4 Market Intel", "GSC Gap Analysis", "Voice Search Optimization"]
   };
 
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <head>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }} />
       </head>
