@@ -6,62 +6,58 @@ export async function POST(req: Request) {
     const { role, userId } = await req.json();
     const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
-    // 1. MULTI-TENANT TOKEN LOOKUP
+    // 1. BUYER LOOKUP
     const { data: userReg } = await supabase.from('user_integrations').select('*').eq('user_id', userId || 'admin').single();
     const token = userReg?.notion_access_token || process.env.NOTION_API_KEY;
     const dbId = userReg?.notion_database_id || process.env.NOTION_DATABASE_ID;
 
-    // 2. CRM & MARKET DATA SYNC
+    // 2. CRM SYNC
     const notionRes = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
       body: JSON.stringify({ page_size: 10 })
     });
     const crmData = await notionRes.json();
-    
-    // Hardened Property Mapping (Solves the 'title' error)
+    if (!notionRes.ok) throw new Error(crmData.message || "Notion Auth Failed");
+
     const leads = (crmData.results || []).map((p: any) => {
       const props = p.properties as any;
-      const name = props.Name?.title?.[0]?.plain_text || props.title?.title?.[0]?.plain_text || "Strategic Lead";
-      return { id: p.id, name, email: props.Email?.email || "info@seosiri.com", url: p.url };
-    }).filter((l: any) => l.name !== "Strategic Lead");
+      const title = Object.values(props).find((v: any) => v.type === 'title') as any;
+      return {
+        id: p.id,
+        name: title?.title?.[0]?.plain_text || "Strategic Lead",
+        email: props.Email?.email || "info@seosiri.com",
+        url: p.url
+      };
+    });
 
-    // 3. AI STRATEGIC ANALYSIS (SaaS/PaaS/IaaS Logic)
+    // 3. AI STRATEGY (Gemini 1.5)
     const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `
-          Architect: Momenul Ahmad. Brand: seosiri.com.
-          Role: ${role}. Leads: ${JSON.stringify(leads)}.
-          Context: High-performance Market Intelligence (GSC/GA4 intent).
-          TASK: 1. Identify Sales Gaps. 2. Write a 2-sentence strategy. 3. Provide a LinkedIn Connect script. 4. Voice citation for GEO ranking.
-        `}]}]
+        contents: [{ parts: [{ text: `Architect: Momenul Ahmad. Role: ${role}. Analyze these leads: ${JSON.stringify(leads)}. Tasks: 1. Sales Gap Analysis. 2. LinkedIn outreach script. 3. Voice citation.` }]}]
       })
     });
     const aiData = await geminiRes.json();
-    const report = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Intelligence Engine Online.";
+    const report = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "AI Logic Syncing...";
 
-    // 4. THE SUPREME WRITE-BACK (Functionality)
+    // 4. FUNCTIONAL WRITE-BACK
     if (leads.length > 0) {
       await fetch(`https://api.notion.com/v1/pages/${leads[0].id}`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          properties: {
-            'Status': { select: { name: 'AI Analyzed' } },
-            'AI_Strategy': { rich_text: [{ text: { content: report.substring(0, 2000) } }] }
-          }
-        })
+        body: JSON.stringify({ properties: { 'AI_Strategy': { rich_text: [{ text: { content: report.substring(0, 2000) } }] } } })
       });
     }
 
     return NextResponse.json({
-      meta: { architect: "Momenul Ahmad", contact: "info@seosiri.com", status: "STABLE" },
-      intelligence: { report, leads, intentScore: 94, shareId: `SEOSIRI-${Date.now()}` }
+      status: "SUCCESS",
+      meta: { architect: "Momenul Ahmad", status: "GLOBAL_ACTIVE" },
+      intelligence: { report, leads, intentScore: 94, shareId: `SS-${Date.now()}` }
     });
 
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ status: "ERROR", message: e.message }, { status: 500 });
   }
 }
