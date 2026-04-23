@@ -1,73 +1,68 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
   try {
-    const { role, userId } = await req.json(); // Now uses dynamic userId
-    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { role } = await req.json();
+    
+    // 1. CONFIGURATION CHECK
+    const keys = {
+      notion: process.env.NOTION_API_KEY,
+      db: process.env.NOTION_DATABASE_ID,
+      gemini: process.env.GEMINI_API_KEY
+    };
 
-    // 1. DYNAMIC BUYER LOOKUP (The SaaS Multi-tenant Fix)
-    const { data: userReg } = await supabase
-      .from('user_integrations')
-      .select('*')
-      .eq('user_id', userId || 'admin') // Real SaaS logic
-      .single();
+    if (!keys.notion || !keys.db || !keys.gemini) {
+      return NextResponse.json({ 
+        status: "DIAGNOSTIC_ERROR", 
+        message: "Missing API Keys in Vercel. Check NOTION_API_KEY, NOTION_DATABASE_ID, and GEMINI_API_KEY." 
+      }, { status: 400 });
+    }
 
-    const token = userReg?.notion_access_token || process.env.NOTION_API_KEY;
-    const dbId = userReg?.notion_database_id || process.env.NOTION_DATABASE_ID;
-
-    // 2. DATA PIPELINE (Notion CRM)
-    const notionRes = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+    // 2. CRM SYNC (NOTION)
+    const notionRes = await fetch(`https://api.notion.com/v1/databases/${keys.db}/query`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+      headers: { 
+        'Authorization': `Bearer ${keys.notion}`, 
+        'Notion-Version': '2022-06-28', 
+        'Content-Type': 'application/json' 
+      },
       body: JSON.stringify({ page_size: 5 })
     });
-    const crmData = await notionRes.json();
-    
-    const leads = (crmData.results || []).map((p: any) => {
+
+    if (!notionRes.ok) {
+      const errorData = await notionRes.json();
+      return NextResponse.json({ status: "DIAGNOSTIC_ERROR", message: `Notion Error: ${errorData.message}` }, { status: 500 });
+    }
+
+    const notionData = await notionRes.json();
+    const leads = (notionData.results || []).map((p: any) => {
       const titleProp = Object.values(p.properties).find((pr: any) => pr.type === 'title') as any;
       return {
-        name: titleProp?.title?.[0]?.plain_text || "Valued Prospect",
-        id: p.id,
-        email: p.properties.Email?.email || ""
+        name: titleProp?.title?.[0]?.plain_text || "Unnamed Lead",
+        id: p.id
       };
-    });
+    }).filter((l: any) => l.name !== "Unnamed Lead");
 
-    // 3. AI STRATEGIC LOGIC (The Brain)
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // 3. AI BRAIN (GEMINI)
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keys.gemini}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `
-          System: SEOSIRI Global IaaS. Architect: Momenul Ahmad.
-          Role: ${role}. Analyze: ${JSON.stringify(leads)}.
-          Match to GSC/GA4 Intent. Provide: 1. 2-sentence strategy. 2. A LinkedIn connection script.` 
-        }]}]
+        contents: [{ parts: [{ text: `Architect: Momenul Ahmad. Role: ${role}. Analyze these Notion leads: ${JSON.stringify(leads)}. Provide a 2-sentence sales strategy.` }]}]
       })
     });
-    const aiData = await geminiRes.json();
-    const strategy = aiData.candidates[0].content.parts[0].text;
 
-    // 4. FUNCTIONAL WRITE-BACK (Workforce Reduction)
-    if (leads.length > 0) {
-      await fetch(`https://api.notion.com/v1/pages/${leads[0].id}`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          properties: {
-            'Status': { select: { name: 'AI Analyzed' } },
-            'AI_Strategy': { rich_text: [{ text: { content: strategy.substring(0, 2000) } }] }
-          }
-        })
-      });
-    }
+    const geminiData = await geminiRes.json();
+    const report = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "AI Engine did not return a strategy.";
 
     return NextResponse.json({
-      meta: { architect: "Momenul Ahmad", status: "STABLE" },
-      intelligence: { report: strategy, leads, intentScore: 94 }
+      status: "SUCCESS",
+      report,
+      leads,
+      meta: { architect: "Momenul Ahmad", brand: "seosiri.com" }
     });
 
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ status: "CRITICAL_FAILURE", message: e.message }, { status: 500 });
   }
 }
