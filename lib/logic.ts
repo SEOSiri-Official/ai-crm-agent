@@ -11,17 +11,21 @@ export async function syncNotionCRM(token: string, dbId: string) {
   const data = await res.json();
   return (data.results || []).map((p: any) => {
     const props = p.properties as any;
+    // Type-safe property discovery
     const titleObj = Object.values(props).find((v: any) => v.type === 'title') as any;
+    const name = (titleObj && titleObj.title && titleObj.title.length > 0) 
+      ? titleObj.title[0].plain_text 
+      : "Strategic Lead";
+      
     return {
       id: p.id,
-      name: titleObj?.title?.[0]?.plain_text || "Strategic Lead",
+      name,
       email: props.Email?.email || "info@seosiri.com",
       url: p.url
     };
   });
 }
 
-// MATCHED NAME: This fixes the 'executeWriteBack' export error
 export async function executeWriteBack(token: string, pageId: string, strategy: string) {
   return await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
     method: 'PATCH',
