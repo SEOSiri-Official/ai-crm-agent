@@ -1,94 +1,98 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
-export default function SeosiriDashboard() {
+export default function SeosiriMainframe() {
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState("seller");
+  const [tab, setTab] = useState("intel");
 
-  useEffect(() => {
-    setMounted(true);
-    fetch('/api/agent').then(res => res.json()).then(json => {
+  const runSync = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/agent', { method: 'POST', body: JSON.stringify({ role, userId: "admin" }) });
+      const json = await res.json();
       setData(json);
-      setLoading(false);
-    });
-  }, []);
-
-  if (!mounted) return null;
+    } finally { setLoading(false); }
+  };
 
   return (
-    <div className="flex min-h-screen bg-[#020202] text-white">
-      {/* GLOBAL SIDEBAR */}
-      <aside className="w-80 bg-black border-r border-white/10 p-10 flex flex-col justify-between fixed h-full shadow-2xl">
-        <div className="space-y-16">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-lg shadow-blue-600/30">S</div>
-            <div>
-               <h2 className="text-white font-black text-2xl tracking-tighter">SEOSIRI</h2>
-               <span className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Global AI Engine</span>
-            </div>
+    <div className="flex flex-col lg:flex-row min-h-screen bg-[#050505] text-[#f2f2f2] font-sans">
+      
+      {/* SIDEBAR */}
+      <aside className="w-full lg:w-72 bg-black border-r border-white/5 p-8 flex flex-col justify-between lg:fixed h-full z-40 shadow-2xl">
+        <div className="space-y-12">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black">S</div>
+            <h1 className="text-lg font-black tracking-tighter uppercase">SEOSIRI <span className="block text-[8px] text-gray-500 font-bold tracking-widest">Mainframe</span></h1>
           </div>
-          <nav className="space-y-8 text-[11px] font-bold text-gray-500 uppercase tracking-[0.25em]">
-            <div className="text-blue-500 flex items-center gap-4 cursor-pointer">
-              <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping"></span> 
-              Intelligence Center
-            </div>
-            <div className="hover:text-white transition-all cursor-pointer opacity-40 hover:opacity-100">CRM: Notion Leads</div>
-            <div className="hover:text-white transition-all cursor-pointer opacity-40 hover:opacity-100">ESP: Resend Mailer</div>
-            <div className="hover:text-white transition-all cursor-pointer opacity-40 hover:opacity-100">Social: Agent Hub</div>
+          <nav className="space-y-4 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+            <button onClick={()=>setTab("intel")} className={`w-full text-left p-3 rounded-xl ${tab==='intel'?'bg-blue-600 text-white shadow-xl':'hover:bg-white/5'}`}>Intelligence Hub</button>
+            <button onClick={()=>setTab("journey")} className={`w-full text-left p-3 rounded-xl ${tab==='journey'?'bg-blue-600 text-white shadow-xl':'hover:bg-white/5'}`}>Lead Journey</button>
           </nav>
         </div>
-        <div className="border-t border-white/5 pt-10 text-[9px] text-gray-700 leading-loose">
-          SYSTEM ARCHITECT: <span className="text-gray-400 font-bold">MOMENUL AHMAD</span><br/>
-          PLATFORM: seosiri.com
+        <div className="pt-8 border-t border-white/5 text-[9px] text-gray-600 uppercase font-black leading-loose">
+           Architect: Momenul Ahmad<br/>info@seosiri.com
         </div>
       </aside>
 
-      {/* COMMAND STAGE */}
-      <main className="ml-80 flex-1 p-20">
-        <header className="flex justify-between items-start mb-24">
-          <div>
-            <h1 className="text-6xl font-black tracking-tighter">System <span className="text-blue-600">Sync</span></h1>
-            <p className="text-gray-500 text-xl font-light mt-4 italic max-w-lg leading-relaxed">
-              Autonomous Sales Agent architected for high-performance lead conversion.
-            </p>
+      {/* COMMAND CENTER */}
+      <main className="lg:ml-72 flex-1 p-8 lg:p-20 overflow-y-auto mb-20">
+        <header className="flex flex-col xl:flex-row justify-between items-start gap-10 mb-20">
+          <div><h2 className="text-6xl font-black tracking-tighter uppercase italic leading-none mb-4">Command <span className="text-blue-600">Center</span></h2>
+            <div className="flex gap-4 p-1 bg-white/5 rounded-full w-fit">
+               <button onClick={()=>setRole("seller")} className={`px-8 py-2 rounded-full text-[9px] font-black transition-all ${role==='seller'?'bg-white text-black':'text-gray-500'}`}>Seller Mode</button>
+               <button onClick={()=>setRole("buyer")} className={`px-8 py-2 rounded-full text-[9px] font-black transition-all ${role==='buyer'?'bg-white text-black':'text-gray-500'}`}>Buyer Mode</button>
+            </div>
           </div>
-          <div className="bg-zinc-900 border border-white/10 p-8 rounded-[2rem] text-center min-w-[200px]">
-             <span className="text-[10px] text-blue-500 uppercase font-black tracking-widest block mb-2">Sync Status</span>
-             <span className="text-2xl font-black">{data?.status === "INTEGRATED_SYSTEM_ACTIVE" ? "LIVE" : "IDLE"}</span>
+          <div className="flex gap-4">
+             <button onClick={()=>window.open('/api/auth/notion')} className="bg-zinc-900 border border-white/10 px-8 py-4 rounded-2xl font-black text-[9px] uppercase hover:bg-white hover:text-black">Link CRM</button>
+             <button onClick={runSync} disabled={loading} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase hover:scale-105 shadow-2xl">
+                {loading ? "Aligning Systems..." : "Initialize Global Core"}
+             </button>
           </div>
         </header>
 
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-6">
-            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <div className="text-blue-600 font-black text-xs tracking-[1em] uppercase">Loading AI Systems...</div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-12 gap-12">
-            <div className="col-span-12 xl:col-span-8 bg-zinc-900/20 border border-white/5 p-12 rounded-[3rem] backdrop-blur-3xl shadow-inner shadow-white/5 relative overflow-hidden">
-               <h3 className="text-blue-500 font-black uppercase text-xs tracking-widest mb-10">AI Strategy Report (Gemini)</h3>
-               <div className="text-gray-300 text-xl leading-relaxed whitespace-pre-wrap italic font-light">
-                 {data?.intelligence?.report || "Awaiting Intelligence..."}
-               </div>
-            </div>
-
-            <div className="col-span-12 xl:col-span-4 space-y-12">
-              <div className="bg-blue-600 p-12 rounded-[3rem] shadow-3xl shadow-blue-600/30">
-                <h3 className="text-white font-black uppercase text-xs tracking-widest mb-6">CRM Integration</h3>
-                <div className="space-y-4">
-                  {data?.intelligence?.leads?.map((l: any, i: number) => (
-                    <div key={i} className="flex justify-between items-center border-b border-white/10 pb-4">
-                      <div className="font-bold text-sm truncate w-32">{l.name}</div>
-                      <div className="text-[9px] bg-white text-black px-3 py-1 rounded-full font-black">ACTIVE</div>
-                    </div>
-                  ))}
+        {data && (
+          <div className="animate-in fade-in slide-in-from-bottom-5 space-y-16">
+            {tab === "intel" && (
+              <div className="grid grid-cols-12 gap-10">
+                <section className="col-span-12 xl:col-span-8 bg-zinc-900/30 border border-white/10 p-10 rounded-[4rem] backdrop-blur-3xl italic text-xl leading-relaxed text-gray-300">
+                  {data.report}
+                </section>
+                <div className="col-span-12 xl:col-span-4 bg-blue-600 p-12 rounded-[4rem] text-center shadow-3xl flex flex-col justify-center">
+                    <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-4">Intent Score</p>
+                    <div className="text-9xl font-black text-white">{data.intentScore}%</div>
                 </div>
               </div>
-            </div>
+            )}
+            {tab === "journey" && (
+              <div className="grid gap-6">
+                {data.leads.map((l: any, i: number) => (
+                  <div key={i} className="bg-zinc-900/30 border border-white/5 p-10 rounded-[3rem] flex justify-between items-center gap-10">
+                    <div><p className="font-black text-2xl text-white">{l.name}</p><p className="text-[9px] text-blue-500 uppercase font-bold tracking-widest">Notion Active</p></div>
+                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden relative"><div className="absolute h-full bg-blue-600" style={{ width: `${75 + i}%` }}></div></div>
+                    <button onClick={()=>window.open(`mailto:${l.email}`)} className="bg-white text-black px-6 py-2 rounded-xl font-black text-[9px] uppercase hover:bg-blue-600 hover:text-white transition-all">Execute ESP</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>
+
+      {/* STICKY TRUST BANNER (International Standard) */}
+      <div className="fixed bottom-0 w-full bg-black/80 backdrop-blur-md border-t border-white/5 p-4 flex flex-col md:flex-row justify-between items-center z-50 text-[9px] font-bold uppercase tracking-widest text-gray-600">
+         <div className="flex gap-8">
+            <span className="text-green-500">● GDPR COMPLIANT</span>
+            <span>CCPA READY</span>
+            <span>COOKIE POLICY ACTIVE</span>
+         </div>
+         <div className="mt-4 md:mt-0 flex gap-6">
+            <a href="/sitemap.xml" className="hover:text-white">Sitemap</a>
+            <p>© seosiri.com | Architected by Momenul Ahmad</p>
+         </div>
+      </div>
     </div>
   );
 }
